@@ -1523,7 +1523,9 @@ public:
         if(MediaTrack* track = context->GetTrack())
         {
             char trackVolume[128];
-            snprintf(trackVolume, sizeof(trackVolume), "%7.2lf", VAL2DB(DAW::GetMediaTrackInfo_Value(track, "D_VOL")));
+            double vol, pan;
+            DAW::GetTrackUIVolPan(track, &vol, &pan);
+            snprintf(trackVolume, sizeof(trackVolume), "%7.2lf", VAL2DB(vol));
             context->UpdateWidgetValue(string(trackVolume));
         }
         else
