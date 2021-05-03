@@ -37,7 +37,7 @@ public:
         if(value == 0.0) return; // ignore button releases
         
         if(MediaTrack* selectedTrack = context->GetSurface()->GetPage()->GetTrackNavigationManager()->GetSelectedTrack())
-            context->GetSurface()->GetFXActivationManager()->MapSelectedTrackFXSlotToWidgets(selectedTrack, context->GetSlotIndex());
+            context->GetSurface()->GetFXActivationManager()->MapSelectedTrackFXSlotToWidgets(selectedTrack, context->GetSlotIndex() + context->GetMappedWidgetsNavigationManager()->GetMappedFxMenuOffset());
     }
 };
 
@@ -277,6 +277,20 @@ public:
         if(value == 0.0) return; // ignore button releases
         
         TheManager->AdjustTrackBank(context->GetPage(), context->GetIntParam());
+    }
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class MappedWidgetsBank : public Action
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+{
+    virtual string GetName() override { return "MappedWidgetsBank"; }
+
+    void Do(ActionContext* context, double value) override
+    {
+        if (value == 0.0) return; // ignore button releases
+
+        TheManager->AdjustMappedWidgetsBank(context->GetPage(), context->GetIntParam());
     }
 };
 
