@@ -110,6 +110,7 @@ class Midi_ControlSurface;
 class OSC_ControlSurface;
 class EuCon_ControlSurface;
 class Widget;
+class MappedWidgetsNavigationManager;
 class TrackNavigationManager;
 class FeedbackProcessor;
 class Zone;
@@ -336,6 +337,7 @@ public:
     Page* GetPage();
     ControlSurface* GetSurface();
     TrackNavigationManager* GetTrackNavigationManager();
+    MappedWidgetsNavigationManager* GetMappedWidgetsNavigationManager();
     int GetParamIndex() { return paramIndex_; }
     
     bool GetSupportsRGB() { return supportsRGB_; }
@@ -1624,6 +1626,42 @@ public:
     }
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class MappedWidgetsNavigationManager
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+{
+private:
+    Page* const page_ = nullptr;
+    int sendsMappingNum_ = 0;
+    int fxMenuMappingNum_ = 0;
+
+    int mappedSendsOffset_ = 0;
+    int mappedFxMenuOffset_ = 0;
+
+    MediaTrack* previousSelectedTrack = nullptr;
+public:
+    MappedWidgetsNavigationManager(Page* page, int sendsMappingNum, int fxMenuMappingNum) : page_(page), sendsMappingNum_(sendsMappingNum), fxMenuMappingNum_(fxMenuMappingNum) {}
+
+    void AdjustMappedWidgetsBank(int amount);
+    
+    void OnTrackSelection() 
+    {
+        ResetMappedWidgetsBankIfTrackChanged();
+    }
+    void OnTrackListChange()
+    {
+        ResetMappedWidgetsBankIfTrackChanged();
+    }
+    void OnTrackSelectionBySurface(MediaTrack* track)
+    {
+        ResetMappedWidgetsBankIfTrackChanged();
+    }
+    void ResetMappedWidgetsBankIfTrackChanged();
+    void ResetMappedWidgetsBank();
+    int GetMappedSendsOffset() { return mappedSendsOffset_; }
+    int GetMappedFxMenuOffset() { return mappedFxMenuOffset_; }
+};
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TrackNavigationManager
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1645,7 +1683,6 @@ private:
     Navigator* const selectedTrackNavigator_ = nullptr;
     Navigator* const focusedFXNavigator_ = nullptr;
     Navigator* const defaultNavigator_ = nullptr;
-
 public:
     TrackNavigationManager(Page* page, bool followMCP, bool synchPages, bool scrollLink, int numChannels) : page_(page), followMCP_(followMCP), synchPages_(synchPages), scrollLink_(scrollLink),
     masterTrackNavigator_(new MasterTrackNavigator(page_)), selectedTrackNavigator_(new SelectedTrackNavigator(page_)), focusedFXNavigator_(new FocusedFXNavigator(page_)), defaultNavigator_(new Navigator(page_))
@@ -1944,11 +1981,14 @@ private:
     double altPressedTime_ = 0;
     
     TrackNavigationManager* const trackNavigationManager_ = nullptr;
+    MappedWidgetsNavigationManager* const mappedWidgetsNavigationManager_ = nullptr;
 
     Navigator* defaultNavigator_ = nullptr;
     
 public:
-    Page(string name, bool followMCP, bool synchPages, bool scrollLink, int numChannels) : name_(name),  trackNavigationManager_(new TrackNavigationManager(this, followMCP, synchPages, scrollLink, numChannels)), defaultNavigator_(new Navigator(this)) { }
+    Page(string name, bool followMCP, bool synchPages, bool scrollLink, int numChannels, int numSends, int numFX) : name_(name),  trackNavigationManager_(new TrackNavigationManager(this, followMCP, synchPages, scrollLink, numChannels)), 
+        mappedWidgetsNavigationManager_(new MappedWidgetsNavigationManager(this, numSends, numFX)),
+        defaultNavigator_(new Navigator(this)) { }
     
     ~Page()
     {
@@ -1960,10 +2000,12 @@ public:
         
         delete trackNavigationManager_;
         delete defaultNavigator_;
+        delete mappedWidgetsNavigationManager_;
     }
     
     string GetName() { return name_; }
     TrackNavigationManager* GetTrackNavigationManager() { return trackNavigationManager_; }
+    MappedWidgetsNavigationManager* GetMappedWidgetsNavigationManager() { return mappedWidgetsNavigationManager_; }
     
     bool GetShift() { return isShift_; }
     bool GetOption() { return isOption_; }
@@ -2141,6 +2183,7 @@ public:
     void OnTrackSelection()
     {
         trackNavigationManager_->OnTrackSelection();
+        mappedWidgetsNavigationManager_->OnTrackSelection();
         
         for(auto surface : surfaces_)
             surface->OnTrackSelection();
@@ -2149,12 +2192,14 @@ public:
     void OnTrackListChange()
     {
         trackNavigationManager_->OnTrackListChange();
+        mappedWidgetsNavigationManager_->OnTrackListChange();
     }
     
     void OnTrackSelectionBySurface(MediaTrack* track)
     {
         trackNavigationManager_->OnTrackSelectionBySurface(track);
-        
+        mappedWidgetsNavigationManager_->OnTrackSelectionBySurface(track);
+       
         for(auto surface : surfaces_)
             surface->OnTrackSelection();
     }
@@ -2370,6 +2415,16 @@ public:
             for(auto page: pages_)
                 if(page->GetTrackNavigationManager()->GetSynchPages())
                     page->GetTrackNavigationManager()->AdjustTrackBank(amount);
+    }
+
+    void AdjustMappedWidgetsBank(Page* sendingPage, int amount)
+    {
+        if (!sendingPage->GetTrackNavigationManager()->GetSynchPages())
+            sendingPage->GetMappedWidgetsNavigationManager()->AdjustMappedWidgetsBank(amount);
+        else
+            for (auto page : pages_)
+                if (page->GetTrackNavigationManager()->GetSynchPages())
+                    page->GetMappedWidgetsNavigationManager()->AdjustMappedWidgetsBank(amount);
     }
     
     void NextPage()

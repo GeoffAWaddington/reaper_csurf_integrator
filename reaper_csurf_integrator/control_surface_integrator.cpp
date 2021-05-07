@@ -786,6 +786,7 @@ void Manager::InitActionsDictionary()
     actions_["PageNameDisplay"] =                   new PageNameDisplay();
     actions_["GoZone"] =                            new GoZone();
     actions_["TrackBank"] =                         new TrackBank();
+    actions_["MappedWidgetsBank"] =                 new MappedWidgetsBank();
     actions_["ClearAllSolo"] =                      new ClearAllSolo();
     actions_["Shift"] =                             new SetShift();
     actions_["Option"] =                            new SetOption();
@@ -873,7 +874,9 @@ void Manager::Init()
         ifstream iniFile(iniFilePath);
         
         int numChannels = 0;
-    
+        int numSends = 0;
+        int numFX = 0;
+
         for (string line; getline(iniFile, line) ; )
         {
             line = regex_replace(line, regex(TabChars), " ");
@@ -887,16 +890,29 @@ void Manager::Init()
                 {
                     if(atoi(tokens[6].c_str()) + atoi(tokens[9].c_str()) > numChannels )
                         numChannels = atoi(tokens[6].c_str()) + atoi(tokens[9].c_str());
+                    if (atoi(tokens[7].c_str()) > numSends)
+                        numSends = atoi(tokens[7].c_str());
+                    if (atoi(tokens[8].c_str()) > numFX)
+                        numFX = atoi(tokens[8].c_str());
+
                 }
                 else if(tokens[0] == OSCSurfaceToken && tokens.size() == 11)
                 {
                     if(atoi(tokens[6].c_str()) + atoi(tokens[9].c_str()) > numChannels )
                         numChannels = atoi(tokens[6].c_str()) + atoi(tokens[9].c_str());
+                    if (atoi(tokens[7].c_str()) > numSends)
+                        numSends = atoi(tokens[7].c_str());
+                    if (atoi(tokens[8].c_str()) > numFX)
+                        numFX = atoi(tokens[8].c_str());
                 }
                 else if(tokens[0] == EuConSurfaceToken && tokens.size() == 7)
                 {
                     if(atoi(tokens[3].c_str()) + atoi(tokens[6].c_str()) > numChannels )
                         numChannels = atoi(tokens[3].c_str()) + atoi(tokens[6].c_str());
+                    if (atoi(tokens[4].c_str()) > numSends)
+                        numSends = atoi(tokens[4].c_str());
+                    if (atoi(tokens[5].c_str()) > numFX)
+                        numFX = atoi(tokens[5].c_str());
                 }
             }
         }
@@ -918,7 +934,7 @@ void Manager::Init()
                     if( ! (tokens.size() == 11  || tokens.size() == 5))
                         continue;
 
-                    currentPage = new Page(tokens[1], tokens[2] == "FollowMCP" ? true : false, tokens[3] == "SynchPages" ? true : false, tokens[4] == "UseScrollLink" ? true : false, numChannels);
+                    currentPage = new Page(tokens[1], tokens[2] == "FollowMCP" ? true : false, tokens[3] == "SynchPages" ? true : false, tokens[4] == "UseScrollLink" ? true : false, numChannels, numSends, numFX);
                     pages_.push_back(currentPage);
                 }
                 else if(tokens[0] == MidiSurfaceToken || tokens[0] == OSCSurfaceToken || tokens[0] == EuConSurfaceToken)
@@ -1035,6 +1051,70 @@ MediaTrack* FocusedFXNavigator::GetTrack()
         return page_->GetTrackNavigationManager()->GetTrackFromId(trackNumber);
     else
         return nullptr;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// MappedWsigetsNavigationManager
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void MappedWidgetsNavigationManager::AdjustMappedWidgetsBank(int amount)
+{
+    MediaTrack* track = page_->GetTrackNavigationManager()->GetSelectedTrack();
+    if (track == nullptr) 
+        return;
+
+    int trackNumSends = GetTrackNumSends(track, 0);
+    int trackNumFX = TrackFX_GetCount(track);
+
+    if (trackNumSends <= sendsMappingNum_)
+        mappedSendsOffset_ = 0;
+    else
+    {
+        mappedSendsOffset_ += amount;
+
+        if (mappedSendsOffset_ < 0)
+            mappedSendsOffset_ = 0;
+
+        int sendsTop = trackNumSends - sendsMappingNum_;
+
+        if (mappedSendsOffset_ > sendsTop)
+            mappedSendsOffset_ = sendsTop;
+    }
+
+    if (trackNumFX <= fxMenuMappingNum_)
+        mappedFxMenuOffset_ = 0;
+    else
+    {
+        mappedFxMenuOffset_ += amount;
+
+        if (mappedFxMenuOffset_ < 0)
+            mappedFxMenuOffset_ = 0;
+
+        int fxTop = trackNumFX - fxMenuMappingNum_;
+
+        if (mappedFxMenuOffset_ > fxTop)
+            mappedFxMenuOffset_ = fxTop;
+    }
+}
+
+void MappedWidgetsNavigationManager::ResetMappedWidgetsBankIfTrackChanged()
+{
+    MediaTrack* track = page_->GetTrackNavigationManager()->GetSelectedTrack();
+    if (track == nullptr) 
+    {
+        previousSelectedTrack = nullptr;
+        ResetMappedWidgetsBank();
+    }
+    else if (track != previousSelectedTrack)
+    {
+        previousSelectedTrack = track;
+        ResetMappedWidgetsBank();
+    }
+}
+
+void MappedWidgetsNavigationManager::ResetMappedWidgetsBank()
+{
+    mappedSendsOffset_ = 0;
+    mappedFxMenuOffset_ = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1205,6 +1285,11 @@ ControlSurface* ActionContext::GetSurface()
 TrackNavigationManager* ActionContext::GetTrackNavigationManager()
 {
     return GetPage()->GetTrackNavigationManager();
+}
+
+MappedWidgetsNavigationManager* ActionContext::GetMappedWidgetsNavigationManager()
+{
+    return GetPage()->GetMappedWidgetsNavigationManager();
 }
 
 MediaTrack* ActionContext::GetTrack()
